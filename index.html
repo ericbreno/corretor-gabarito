@@ -23,7 +23,15 @@
     }
 
     .options-container {
+      display: flex;
+      justify-content: space-around;
+      flex-wrap: wrap;
       margin-block: 1.5vh;
+    }
+
+    .options-container>input {
+      width: 100%;
+      margin-top: 20px;
     }
 
     .actions-container {
@@ -64,6 +72,7 @@
     <div class="options-container">
       <button id="start-camera">Start Camera</button>
       <button id="change-camera">Change Camera</button>
+      <input type="range" id="sens" name="sens" min="0" max="5">
     </div>
 
     <div id="canvas-container">
@@ -100,7 +109,7 @@
     let selectedDevice = 0
     let width = window.innerWidth - 10
     let height = Math.floor(window.innerHeight * .7)
-    const sensibility = 60
+    let sensibility = 60
   </script>
 
   <script>
@@ -152,6 +161,17 @@
     })
 
     cameraBtn.addEventListener('click', onStart);
+
+    let _d = null
+    function debounce(cb, timeout) {
+      clearTimeout(_d)
+      _d = setTimeout(cb, timeout)
+    }
+
+    document.getElementById('sens').addEventListener('input', function () {
+      sensibility = 20 + this.value * 15
+      debounce(copyAns, 350)
+    })
   </script>
 
   <script>
@@ -180,14 +200,13 @@
 
     const copyAns = (e) => {
       const [x, y, x2, y2] = getAnswerBox()
-
       const ssData = takeSS(ssCanvas)
 
-      clearCanvas(ansCanvas)
+      drawAnswerBox()
       const ansContext = ansCanvas.getContext('2d')
       ansContext.beginPath()
 
-      for (let i = 0; i < ssData.length; i += 4) {
+      for (let i = x * y * 4; i < x2 * y2 * 16; i += 4) {
         const [r, g, b] = [ssData[i], ssData[i + 1], ssData[i + 2]]
         if ((r + g + b) < (sensibility * 3)) {
           ansContext.fillStyle = `red`
@@ -209,7 +228,7 @@
     document.getElementById('click-answer').addEventListener('click', copyAns)
     document.getElementById('click-correction').addEventListener('click', () => takeSS(corrCanvas))
     document.getElementById('reset').addEventListener('click', () => clearCanvas(corrCanvas))
-    document.getElementById('reset-answer').addEventListener('click', () => clearCanvas(ansCanvas))
+    document.getElementById('reset-answer').addEventListener('click', () => drawAnswerBox())
   </script>
 
   <script>
@@ -223,7 +242,6 @@
       ctx.strokeStyle = 'red'
       ctx.strokeRect(box[0], box[1], box[2] - box[0], box[3] - box[1])
     }
-    drawAnswerBox()
 
     const handleRedimension = target => (e) => {
       e.preventDefault()
