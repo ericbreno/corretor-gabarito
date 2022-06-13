@@ -1,0 +1,239 @@
+<head>
+  <title>Camera Grid</title>
+
+  <style>
+    body {
+      width: 100vw;
+      height: 100vh;
+      margin: 0;
+      padding: 0;
+    }
+
+    * {
+      font-size: min(40px, 8vw);
+      word-break: break-all;
+      word-wrap: break-word;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .options-container {
+      margin-block: 1.5vh;
+    }
+
+    .actions-container {
+      display: flex;
+      flex-direction: column;
+      gap: 1vh;
+      margin-block: 1.5vh;
+    }
+
+    #canvas-container {
+      position: relative;
+    }
+
+    #canvas-container>canvas,
+    #canvas-container>div {
+      position: absolute;
+      inset: 0;
+    }
+
+    #reset-answer {
+      margin-top: 3vh;
+    }
+
+    #topLeft,
+    #bottomRight {
+      width: min(4vw, 4vh);
+      height: min(4vw, 4vh);
+      border: 3px solid white;
+      background-color: black;
+      border-radius: 50%;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="container">
+    <div class="options-container">
+      <button id="start-camera">Start Camera</button>
+      <button id="change-camera">Change Camera</button>
+    </div>
+
+    <div id="canvas-container">
+      <video id="video" autoplay></video>
+      <canvas id="corr-canvas"></canvas>
+      <canvas id="ans-canvas"></canvas>
+      <div id="topLeft" draggable></div>
+      <div id="bottomRight" draggable></div>
+    </div>
+
+    <canvas hidden id="ss-canvas"></canvas>
+
+    <div class="actions-container">
+      <button id="click-answer">Tirar Foto Gabarito</button>
+      <button id="click-correction">Tirar Foto Prova</button>
+      <button id="reset">Resetar Prova</button>
+      <button id="reset-answer">Resetar Gabarito</button>
+    </div>
+
+  </div>
+
+  <script>
+    const cameraBtn = document.querySelector("#start-camera");
+    const changeCameraBtn = document.querySelector("#change-camera");
+    const video = document.querySelector("#video");
+
+    const ssCanvas = document.querySelector("#ss-canvas");
+    const ansCanvas = document.querySelector("#ans-canvas");
+    const corrCanvas = document.querySelector("#corr-canvas");
+
+    const topLeft = document.querySelector("#topLeft");
+    const bottomRight = document.querySelector("#bottomRight");
+
+    let selectedDevice = 0
+    let width = window.innerWidth - 10
+    let height = Math.floor(window.innerHeight * .7)
+    const sensibility = 60
+  </script>
+
+  <script>
+    // Setup and configuration
+    async function onStart(deviceId) {
+      const isMobile = navigator.userAgentData.mobile
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          deviceId,
+          width: isMobile ? { ideal: 1280, max: 1920 } : { ideal: 720, max: 1280 },
+          height: isMobile ? { ideal: 720, max: 1280 } : { ideal: 1280, max: 1920 },
+          facingMode: { ideal: "environment" },
+        },
+        audio: false
+      });
+      video.srcObject = stream;
+
+      const vts = stream.getVideoTracks()
+      const stts = vts[0].getSettings()
+
+      height = stts.height
+      width = stts.width
+
+      video.setAttribute('width', width)
+      video.setAttribute('height', height)
+      ssCanvas.setAttribute('width', width)
+      ssCanvas.setAttribute('height', height)
+      ansCanvas.setAttribute('width', width)
+      ansCanvas.setAttribute('height', height)
+      corrCanvas.setAttribute('width', width)
+      corrCanvas.setAttribute('height', height)
+
+      topLeft.style.top = '50';
+      topLeft.style.left = '50';
+
+      bottomRight.style.top = `${height - 70}`;
+      bottomRight.style.left = `${width - 70}`;
+    }
+
+    onStart()
+
+    changeCameraBtn.addEventListener('click', async () => {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videos = devices.filter(device => device.kind === 'videoinput');
+
+      selectedDevice = (selectedDevice + 1) % videos.length
+      const id = videos[selectedDevice].deviceId
+      onStart(id)
+    })
+
+    cameraBtn.addEventListener('click', onStart);
+  </script>
+
+  <script>
+    // Handling the image
+    const takeSS = (target) => {
+      const ssCtx = target.getContext('2d')
+
+      ssCtx.drawImage(video, 0, 0, width, height);
+      const data = ssCtx.getImageData(0, 0, width, height).data
+      return data
+    }
+
+    const clearCanvas = (target) => {
+      const ctx = target.getContext('2d')
+      ctx.clearRect(0, 0, target.width, target.height)
+    }
+
+    const getAnswerBox = () => {
+      return [
+        topLeft.offsetLeft,
+        topLeft.offsetTop,
+        bottomRight.offsetLeft + bottomRight.offsetWidth,
+        bottomRight.offsetTop + bottomRight.offsetHeight
+      ]
+    }
+
+    const copyAns = (e) => {
+      const [x, y, x2, y2] = getAnswerBox()
+
+      const ssData = takeSS(ssCanvas)
+
+      clearCanvas(ansCanvas)
+      const ansContext = ansCanvas.getContext('2d')
+      ansContext.beginPath()
+
+      for (let i = 0; i < ssData.length; i += 4) {
+        const [r, g, b] = [ssData[i], ssData[i + 1], ssData[i + 2]]
+        if ((r + g + b) < (sensibility * 3)) {
+          ansContext.fillStyle = `red`
+
+          const [px, py] = [
+            ((i / 4) % width),
+            Math.floor(i / (width * 4))
+          ]
+
+          if (px >= x && py >= y && px <= x2 && py <= y2) {
+            ansContext.fillRect(px, py, 1, 1)
+          }
+        }
+      }
+
+      ansContext.stroke()
+    }
+
+    document.getElementById('click-answer').addEventListener('click', copyAns)
+    document.getElementById('click-correction').addEventListener('click', () => takeSS(corrCanvas))
+    document.getElementById('reset').addEventListener('click', () => clearCanvas(corrCanvas))
+    document.getElementById('reset-answer').addEventListener('click', () => clearCanvas(ansCanvas))
+  </script>
+
+  <script>
+    // Handle redimensioning
+    const drawAnswerBox = () => {
+      const box = getAnswerBox()
+
+      clearCanvas(ansCanvas)
+      const ctx = ansCanvas.getContext('2d')
+
+      ctx.strokeStyle = 'red'
+      ctx.strokeRect(box[0], box[1], box[2] - box[0], box[3] - box[1])
+    }
+    drawAnswerBox()
+
+    const handleRedimension = target => (e) => {
+      e.preventDefault()
+      const [x, y] = [e.offsetX || e.changedTouches[0].clientX, e.offsetY || e.changedTouches[0].clientY]
+      target.style.top = y - 125
+      target.style.left = x - 125
+      drawAnswerBox()
+    }
+
+    topLeft.addEventListener('touchmove', handleRedimension(topLeft))
+    bottomRight.addEventListener('touchmove', handleRedimension(bottomRight))
+  </script>
+</body>
